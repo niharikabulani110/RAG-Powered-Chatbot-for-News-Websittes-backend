@@ -7,43 +7,45 @@ from qdrant_client.models import Distance
 import google.generativeai as genai
 from app.redis_client import store_chat
 
-# Load .env variables
+# Load environment variables
 load_dotenv()
 
 # Constants
 COLLECTION_NAME = "news"
-QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+QDRANT_URL = os.getenv("QDRANT_URL")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+print("✅ Qdrant URL:", QDRANT_URL)
+print("✅ Using Gemini Key (exists):", bool(GOOGLE_API_KEY))
 
 # Initialize services
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
-qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
-genai.configure(api_key=GEMINI_API_KEY)
+qdrant = QdrantClient(url=QDRANT_URL)
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
 def ask_question(query: str, session_id: str) -> str:
     try:
         # Step 1: Embed the query
         query_vector = embedder.encode([query])[0].tolist()
-        print("Query Vector:", query_vector)  # Debugging log
+        print("🧠 Query Vector:", query_vector)
 
-        # Step 2: Search in Qdrant
+        # Step 2: Retrieve top results from Qdrant
         results = qdrant.search(
             collection_name=COLLECTION_NAME,
             query_vector=query_vector,
             limit=3
         )
-
-        print("Qdrant Search Results:", results)  # Debugging log
+        print("🔎 Qdrant Search Results:", results)
 
         if not results:
             return "I couldn't find any relevant articles to answer your question."
 
-        # Step 3: Build context from top results
-        context = "\n\n".join([r.payload["text"] for r in results])
-        print("Context:", context)  # Debugging log
+        # Step 3: Build RAG context
+        context = "\n\n".join([r.payload.get("text", "") for r in results])
+        print("📚 Context passed to Gemini:\n", context)
 
-        # Step 4: Build prompt
+        # Step 4: Construct the prompt
         prompt = f"""Use the context below to answer the user's question.
 
 Context:
@@ -53,19 +55,18 @@ Question:
 {query}
 """
 
-        # Step 5: Generate answer with Gemini
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        # Step 5: Generate answer from Gemini
+        print("📡 Sending prompt to Gemini...")
         response = model.generate_content(prompt)
-        print("Gemini Response:", response)  # Debugging log
+        print("✅ Gemini response received")
         answer = response.text.strip()
 
-        # Step 6: Store in Redis
+        # Step 6: Store Q&A in Redis
         store_chat(session_id, query, answer)
-        print(f"Storing in Redis: {session_id}, {query}, {answer}")  # Debugging log
+        print(f"💾 Stored in Redis: session_id={session_id}")
 
         return answer
 
     except Exception as e:
-        print("Gemini API Error:\n", traceback.format_exc())
-        print("Error Details:", str(e))  # Log error details
+        print("❌ Gemini API Error:\n", traceback.format_exc())
         return "Sorry, I encountered an error while fetching the answer."

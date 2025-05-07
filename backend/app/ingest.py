@@ -6,7 +6,6 @@ import feedparser
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct, VectorParams, Distance
-
 # Load environment variables
 load_dotenv()
 
@@ -14,9 +13,9 @@ load_dotenv()
 COLLECTION_NAME = "news"
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
-
+QDRANT_URL = os.getenv("QDRANT_URL")
+qdrant = QdrantClient(url=QDRANT_URL)
 # Initialize Qdrant & Embedder
-qdrant = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 def get_feeds():
