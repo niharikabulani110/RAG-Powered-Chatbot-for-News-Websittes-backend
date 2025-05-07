@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+jina
+qdrant-client
+redis
+python-dotenv
+requests
+google-generativeai
