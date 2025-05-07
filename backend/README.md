@@ -9,6 +9,8 @@ A FastAPI-based backend service that implements a Retrieval-Augmented Generation
 - 🤖 AI-powered responses using Google's Gemini API
 - 💾 Vector storage with Qdrant
 - 🔄 Session management with Redis
+- 🗄️ PostgreSQL database for transcript storage
+- 🐳 Docker and Docker Compose support
 - 🚀 FastAPI backend with async support
 - 🔒 CORS-enabled for frontend integration
 - 📊 Health check endpoint
@@ -18,7 +20,7 @@ A FastAPI-based backend service that implements a Retrieval-Augmented Generation
 
 ### RAG Pipeline Flow
 1. **Data Ingestion**
-   - RSS feed scraping from multiple news sources
+   - RSS feed scraping from multiple news sources (The Guardian, Hacker News)
    - Fallback to mock data if RSS fails
    - Text preprocessing and cleaning
 
@@ -37,21 +39,56 @@ A FastAPI-based backend service that implements a Retrieval-Augmented Generation
    - Top-k document retrieval (k=3)
    - Context-aware response generation using Gemini API
 
-### Session Management
-- UUID-based session identification
-- Redis-based chat history storage
-- Session expiry after 1 hour (configurable)
-- Automatic session cleanup
+### Data Storage
+- **Vector Database (Qdrant)**
+  - Stores article embeddings and text
+  - Enables semantic search
+  - Persistent storage with Docker volumes
+
+- **Session Management (Redis)**
+  - UUID-based session identification
+  - Redis-based chat history storage
+  - Session expiry after 24 hours (configurable)
+  - Automatic session cleanup
+
+- **Transcript Storage (PostgreSQL)**
+  - Stores all chat transcripts
+  - Includes session ID, user input, bot response, and timestamp
+  - Persistent storage with Docker volumes
 
 ## Setup
 
 ### Prerequisites
-- Python 3.8+
-- Redis server
-- Qdrant server
+- Docker and Docker Compose
 - Google Gemini API key
 
 ### Installation
+
+1. Clone the repository and navigate to the backend directory:
+```bash
+cd backend
+```
+
+2. Configure environment variables:
+- Create a `.env` file with the following variables:
+  ```plaintext
+  GEMINI_API_KEY=your_gemini_api_key
+  REDIS_HOST=redis
+  REDIS_PORT=6379
+  QDRANT_HOST=qdrant
+  QDRANT_PORT=6333
+  QDRANT_URL=http://qdrant:6333
+  DATABASE_URL=postgresql://verifast:verifast123@db:5432/chatbot
+  ```
+
+3. Start the services using Docker Compose:
+```bash
+docker-compose up --build
+```
+
+The API will be available at `http://localhost:8000`
+
+### Manual Setup (without Docker)
 
 1. Create a virtual environment:
 ```bash
@@ -64,30 +101,27 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-3. Configure environment variables:
-- Copy `.env.example` to `.env`
-- Update the variables in `.env` with your configuration:
-  ```plaintext
-  GEMINI_API_KEY=your_gemini_api_key
-  REDIS_HOST=localhost
-  REDIS_PORT=6379
-  QDRANT_HOST=localhost
-  QDRANT_PORT=6333
-  ```
-
-4. Start the services:
+3. Start the required services:
 ```bash
-# Start Redis (if not running)
-redis-server
+# Start PostgreSQL
+docker run -d --name postgres \
+  -e POSTGRES_USER=verifast \
+  -e POSTGRES_PASSWORD=verifast123 \
+  -e POSTGRES_DB=chatbot \
+  -p 5432:5432 \
+  postgres:15
 
-# Start Qdrant (if not running)
-docker run -p 6333:6333 qdrant/qdrant
+# Start Redis
+docker run -d --name redis -p 6380:6379 redis:alpine
 
-# Run the application
-uvicorn app.main:app --reload
+# Start Qdrant
+docker run -d --name qdrant -p 6333:6333 qdrant/qdrant
 ```
 
-The API will be available at `http://localhost:8000`
+4. Run the application:
+```bash
+uvicorn app.main:app --reload
+```
 
 ## API Documentation
 
@@ -109,22 +143,26 @@ Once the server is running, you can access:
 - `POST /reset/{session_id}`
   - Clears chat history for the session
 
-## Redis Configuration
+## Data Management
 
-### Session Management
-- TTL: 1 hour (configurable)
+### Redis Configuration
+- TTL: 24 hours (configurable)
 - Storage: List data structure
 - Format: Alternating Q&A pairs
 - Example:
   ```
-  session_id -> ["Q: question1", "A: answer1", "Q: question2", "A: answer2"]
+  session_id -> ["User: question1", "Bot: answer1", "User: question2", "Bot: answer2"]
   ```
 
-### TTL Configuration
-```python
-# Example Redis TTL configuration
-REDIS_SESSION_TTL = 3600  # 1 hour in seconds
-REDIS_MAX_SESSIONS = 1000  # Maximum concurrent sessions
+### PostgreSQL Schema
+```sql
+CREATE TABLE transcripts (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR,
+    user_input TEXT,
+    bot_response TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ## Project Structure
@@ -135,20 +173,25 @@ backend/
 │   ├── main.py            # FastAPI entrypoint
 │   ├── rag.py             # RAG pipeline implementation
 │   ├── redis_client.py    # Redis client configuration
-│   ├── ingest.py          # News scraping and embedding generation
-│   └── models.py          # Pydantic models
-├── requirements.txt       # Project dependencies
-└── .env                  # Environment variables
+│   ├── db.py             # PostgreSQL database models
+│   ├── ingest.py         # News scraping and embedding generation
+│   └── models.py         # Pydantic models
+├── requirements.txt      # Project dependencies
+├── Dockerfile           # Docker configuration
+├── docker-compose.yml   # Docker Compose configuration
+└── .env                # Environment variables
 ```
 
 ## Development
 
 ### Technologies Used
 - FastAPI for the web framework
-- Redis for caching and storage
+- Redis for session management
 - Qdrant for vector database
+- PostgreSQL for transcript storage
 - Google Gemini API for text generation
 - SentenceTransformers for embeddings
+- Docker for containerization
 
 ### Code Style
 - Follow PEP 8 guidelines
