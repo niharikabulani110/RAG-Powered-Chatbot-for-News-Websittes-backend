@@ -25,6 +25,7 @@ def ask_question(query: str, session_id: str) -> str:
     try:
         # Step 1: Embed the query
         query_vector = embedder.encode([query])[0].tolist()
+        print("Query Vector:", query_vector)  # Debugging log
 
         # Step 2: Search in Qdrant
         results = qdrant.search(
@@ -33,11 +34,14 @@ def ask_question(query: str, session_id: str) -> str:
             limit=3
         )
 
+        print("Qdrant Search Results:", results)  # Debugging log
+
         if not results:
             return "I couldn't find any relevant articles to answer your question."
 
         # Step 3: Build context from top results
         context = "\n\n".join([r.payload["text"] for r in results])
+        print("Context:", context)  # Debugging log
 
         # Step 4: Build prompt
         prompt = f"""Use the context below to answer the user's question.
@@ -52,12 +56,16 @@ Question:
         # Step 5: Generate answer with Gemini
         model = genai.GenerativeModel("gemini-1.5-flash-latest")
         response = model.generate_content(prompt)
+        print("Gemini Response:", response)  # Debugging log
         answer = response.text.strip()
 
         # Step 6: Store in Redis
         store_chat(session_id, query, answer)
+        print(f"Storing in Redis: {session_id}, {query}, {answer}")  # Debugging log
+
         return answer
 
-    except Exception:
+    except Exception as e:
         print("Gemini API Error:\n", traceback.format_exc())
+        print("Error Details:", str(e))  # Log error details
         return "Sorry, I encountered an error while fetching the answer."

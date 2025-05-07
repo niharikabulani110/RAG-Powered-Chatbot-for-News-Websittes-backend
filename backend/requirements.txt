@@ -1,8 +1,9 @@
 fastapi
 uvicorn
-jina
+sentence-transformers
 qdrant-client
 redis
 python-dotenv
-requests
 google-generativeai
+feedparser
+requests
